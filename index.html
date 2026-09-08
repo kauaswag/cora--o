@@ -1,52 +1,44 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-
     <meta
       name="viewport"
-      content="width=device-width,
-             initial-scale=1.0,
-             maximum-scale=1.0,
-             user-scalable=no"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-
-    <title>Heart Particles</title>
-
+    <title>Coração de Partículas</title>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
       html,
       body {
-        width: 100%;
+        margin: 0;
         height: 100%;
+        background: #0a0a0a;
         overflow: hidden;
-        background: #050505;
       }
-
-      body {
-        touch-action: none;
-      }
-
-      canvas {
-        display: block;
-        width: 100%;
-        height: 100%;
-        touch-action: none;
+      #svg-source {
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: hidden;
       }
     </style>
   </head>
-
   <body>
+    <!-- SVG fonte do caminho (escondido) -->
+    <svg id="svg-source">
+      <path
+        id="heart-path"
+        d="M300,90 C300,30 240,0 190,0 C130,0 90,50 90,110 C90,200 180,260 300,340 C420,260 510,200 510,110 C510,50 470,0 410,0 C360,0 300,30 300,90 Z"
+      ></path>
+    </svg>
+
     <canvas id="canvas"></canvas>
 
+    <!-- Bibliotecas de Animação e 3D -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 
-    <script src="Script.js"></script>
+    <!-- Seu arquivo JavaScript separado -->
+    <script src="script.js"></script>
   </body>
 </html>
