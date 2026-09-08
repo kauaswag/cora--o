@@ -780,4 +780,3 @@ updateHeart(0);
 formHeart();
 
 animate();
-BACK;
