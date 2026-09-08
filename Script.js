@@ -1,319 +1,845 @@
-// ---- Setup básico do Three.js ----
+// ============================================================
+// HEART PARTICLE ANIMATION
+// ============================================================
+
+// ------------------------------------------------------------
+// CONFIGURAÇÕES
+// ------------------------------------------------------------
+
+const CONFIG = {
+  // Quantidade principal de partículas
+  PARTICLES: window.innerWidth < 600 ? 8500 : 14000,
+
+  // Quantidade de partículas soltas ao redor
+  SPARKLES: window.innerWidth < 600 ? 1200 : 2200,
+
+  // Tamanho das partículas
+  PARTICLE_SIZE: window.innerWidth < 600 ? 2.8 : 3.2,
+
+  // Tamanho máximo das partículas
+  PARTICLE_SIZE_RANDOM: 3.8,
+
+  // Tamanho do coração
+  HEART_SCALE: window.innerWidth < 600 ? 13.5 : 15.5,
+
+  // Espessura 3D do coração
+  DEPTH: 75,
+
+  // Quanto o coração se espalha
+  SCATTER_X: 700,
+  SCATTER_Y: 650,
+  SCATTER_Z: 600,
+
+  // Tempo parado depois de formar
+  HOLD_TIME: 3.5,
+
+  // Tempo para formar
+  FORM_TIME: 3.8,
+
+  // Tempo para desaparecer
+  DISSOLVE_TIME: 4.0,
+
+  // Intervalo entre partículas
+  STAGGER: 0.00018,
+};
+
+// ============================================================
+// THREE.JS
+// ============================================================
+
 const canvas = document.getElementById("canvas");
-canvas.style.touchAction = "none"; // impede o navegador de "rolar a página" ao arrastar no celular
+
+canvas.style.touchAction = "none";
 
 const renderer = new THREE.WebGLRenderer({
-  canvas,
+  canvas: canvas,
   antialias: true,
-  alpha: true,
+  alpha: false,
+  powerPreference: "high-performance",
 });
+
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
 renderer.setSize(window.innerWidth, window.innerHeight);
-// Limita o pixel ratio para 2, melhorando a performance no mobile
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+renderer.setClearColor(0x050505, 1);
+
+// ------------------------------------------------------------
+// SCENE
+// ------------------------------------------------------------
 
 const scene = new THREE.Scene();
+
+// ------------------------------------------------------------
+// CAMERA
+// ------------------------------------------------------------
+
 const camera = new THREE.PerspectiveCamera(
-  60,
+  55,
   window.innerWidth / window.innerHeight,
   0.1,
-  2000,
+  3000,
 );
-camera.position.z = 500;
+
+camera.position.z = 520;
+
+// ============================================================
+// RESIZE
+// ============================================================
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
+
   camera.updateProjectionMatrix();
+
   renderer.setSize(window.innerWidth, window.innerHeight);
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 });
 
-// ---- Gera uma textura de brilho (glow) via canvas ----
+// ============================================================
+// TEXTURA DE GLOW
+// ============================================================
+
 function createGlowTexture() {
   const size = 128;
-  const canvasTex = document.createElement("canvas");
-  canvasTex.width = size;
-  canvasTex.height = size;
-  const ctx = canvasTex.getContext("2d");
+
+  const textureCanvas = document.createElement("canvas");
+
+  textureCanvas.width = size;
+  textureCanvas.height = size;
+
+  const ctx = textureCanvas.getContext("2d");
+
+  const center = size / 2;
 
   const gradient = ctx.createRadialGradient(
-    size / 2,
-    size / 2,
+    center,
+    center,
     0,
-    size / 2,
-    size / 2,
-    size / 2,
+    center,
+    center,
+    center,
   );
+
   gradient.addColorStop(0, "rgba(255,255,255,1)");
-  gradient.addColorStop(0.2, "rgba(255,180,210,0.9)");
-  gradient.addColorStop(0.5, "rgba(255,80,140,0.4)");
-  gradient.addColorStop(1, "rgba(255,0,80,0)");
+
+  gradient.addColorStop(0.12, "rgba(255,210,225,1)");
+
+  gradient.addColorStop(0.3, "rgba(255,105,160,0.95)");
+
+  gradient.addColorStop(0.55, "rgba(255,45,115,0.45)");
+
+  gradient.addColorStop(1, "rgba(255,0,90,0)");
 
   ctx.fillStyle = gradient;
+
   ctx.fillRect(0, 0, size, size);
 
-  return new THREE.CanvasTexture(canvasTex);
+  const texture = new THREE.CanvasTexture(textureCanvas);
+
+  texture.needsUpdate = true;
+
+  return texture;
 }
 
 const glowTexture = createGlowTexture();
 
-// ---- Pega o path do SVG e extrai pontos do coração ----
-const path = document.querySelector("#heart-path");
-const length = path.getTotalLength();
-const vertices = [];
-const targets = [];
+// ============================================================
+// FUNÇÃO MATEMÁTICA DO CORAÇÃO
+// ============================================================
+//
+// Essa é a famosa equação paramétrica:
+//
+// X = 16 sin³(t)
+// Y = 13 cos(t)
+//     - 5 cos(2t)
+//     - 2 cos(3t)
+//     - cos(4t)
+//
+// Aqui usamos ela para gerar uma área preenchida,
+// e não apenas o contorno.
+// ============================================================
 
-for (let i = 0; i < length; i += 1.5) {
-  const point = path.getPointAtLength(i);
+function heartPoint(t, scale) {
+  const x = 16 * Math.pow(Math.sin(t), 3);
 
-  const targetX = point.x - 300;
-  const targetY = -point.y + 170;
-  const targetZ = 0;
+  const y =
+    13 * Math.cos(t) -
+    5 * Math.cos(2 * t) -
+    2 * Math.cos(3 * t) -
+    Math.cos(4 * t);
 
-  targets.push(new THREE.Vector3(targetX, targetY, targetZ));
-
-  const scatter = new THREE.Vector3(
-    targetX + (Math.random() - 0.5) * 900,
-    targetY + (Math.random() - 0.5) * 900,
-    (Math.random() - 0.5) * 800,
-  );
-
-  vertices.push(scatter.clone());
+  return {
+    x: x * scale,
+    y: y * scale,
+  };
 }
 
-// ---- Geometria e material do coração (com brilho) ----
-const geometry = new THREE.BufferGeometry().setFromPoints(vertices);
-const material = new THREE.PointsMaterial({
-  size: 14,
-  map: glowTexture,
+// ============================================================
+// GERAÇÃO DAS PARTÍCULAS DO CORAÇÃO
+// ============================================================
+
+const particleCount = CONFIG.PARTICLES;
+
+const positions = new Float32Array(particleCount * 3);
+
+const targets = new Float32Array(particleCount * 3);
+
+const scatterPositions = new Float32Array(particleCount * 3);
+
+const particleSizes = new Float32Array(particleCount);
+
+const particleAlpha = new Float32Array(particleCount);
+
+// ------------------------------------------------------------
+// Função que cria um ponto dentro do coração
+// ------------------------------------------------------------
+
+function createHeartParticle() {
+  // Escolhemos um ângulo
+  const t = Math.random() * Math.PI * 2;
+
+  // Ponto da borda
+  const edge = heartPoint(t, CONFIG.HEART_SCALE);
+
+  // sqrt cria distribuição mais uniforme
+  // dentro da área.
+  const radius = Math.sqrt(Math.random());
+
+  let x = edge.x * radius;
+
+  let y = edge.y * radius;
+
+  // Pequena irregularidade
+  x += (Math.random() - 0.5) * 2.5;
+
+  y += (Math.random() - 0.5) * 2.5;
+
+  // ----------------------------------------------------------
+  // Cria profundidade 3D
+  // ----------------------------------------------------------
+
+  const z = (Math.random() - 0.5) * CONFIG.DEPTH;
+
+  // ----------------------------------------------------------
+  // Algumas partículas ficam mais próximas da borda.
+  // Isso ajuda a dar o aspecto "nuvem".
+  // ----------------------------------------------------------
+
+  if (Math.random() < 0.38) {
+    const edgeAmount = 0.82 + Math.random() * 0.2;
+
+    x *= edgeAmount;
+    y *= edgeAmount;
+  }
+
+  return {
+    x,
+    y,
+    z,
+  };
+}
+
+// ============================================================
+// CRIA TODAS AS PARTÍCULAS
+// ============================================================
+
+for (let i = 0; i < particleCount; i++) {
+  const index = i * 3;
+
+  // Posição final
+  const heart = createHeartParticle();
+
+  targets[index] = heart.x;
+
+  targets[index + 1] = heart.y;
+
+  targets[index + 2] = heart.z;
+
+  // ----------------------------------------------------------
+  // Posição inicial espalhada
+  // ----------------------------------------------------------
+
+  scatterPositions[index] = heart.x + (Math.random() - 0.5) * CONFIG.SCATTER_X;
+
+  scatterPositions[index + 1] =
+    heart.y + (Math.random() - 0.5) * CONFIG.SCATTER_Y;
+
+  scatterPositions[index + 2] =
+    heart.z + (Math.random() - 0.5) * CONFIG.SCATTER_Z;
+
+  // Começa espalhado
+  positions[index] = scatterPositions[index];
+
+  positions[index + 1] = scatterPositions[index + 1];
+
+  positions[index + 2] = scatterPositions[index + 2];
+
+  // ----------------------------------------------------------
+  // Tamanho aleatório
+  // ----------------------------------------------------------
+
+  particleSizes[i] =
+    CONFIG.PARTICLE_SIZE + Math.random() * CONFIG.PARTICLE_SIZE_RANDOM;
+
+  // Alpha aleatório
+  particleAlpha[i] = 0.35 + Math.random() * 0.65;
+}
+
+// ============================================================
+// GEOMETRIA
+// ============================================================
+
+const geometry = new THREE.BufferGeometry();
+
+geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+geometry.setAttribute("aSize", new THREE.BufferAttribute(particleSizes, 1));
+
+geometry.setAttribute("aAlpha", new THREE.BufferAttribute(particleAlpha, 1));
+
+// ============================================================
+// SHADER DAS PARTÍCULAS
+// ============================================================
+
+const particleMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    uTexture: {
+      value: glowTexture,
+    },
+
+    uPixelRatio: {
+      value: Math.min(window.devicePixelRatio || 1, 2),
+    },
+  },
+
+  vertexShader: `
+
+      attribute float aSize;
+      attribute float aAlpha;
+
+      varying float vAlpha;
+
+      uniform float uPixelRatio;
+
+      void main() {
+
+        vAlpha = aAlpha;
+
+        vec4 mvPosition =
+          modelViewMatrix *
+          vec4(position, 1.0);
+
+        gl_PointSize =
+          aSize *
+          uPixelRatio *
+          (420.0 / -mvPosition.z);
+
+        gl_Position =
+          projectionMatrix *
+          mvPosition;
+
+      }
+
+    `,
+
+  fragmentShader: `
+
+      uniform sampler2D uTexture;
+
+      varying float vAlpha;
+
+      void main() {
+
+        vec4 textureColor =
+          texture2D(
+            uTexture,
+            gl_PointCoord
+          );
+
+        // Rosa principal
+        vec3 pink =
+          vec3(
+            1.0,
+            0.12,
+            0.42
+          );
+
+        // Pequena variação de brilho
+        float brightness =
+          textureColor.r;
+
+        vec3 finalColor =
+          pink *
+          (0.65 + brightness * 0.65);
+
+        float alpha =
+          textureColor.a *
+          vAlpha;
+
+        if (alpha < 0.01)
+          discard;
+
+        gl_FragColor =
+          vec4(
+            finalColor,
+            alpha
+          );
+
+      }
+
+    `,
+
   transparent: true,
+
   depthWrite: false,
+
   blending: THREE.AdditiveBlending,
-  color: 0xff3366,
 });
 
-// "points" é o grupo que giramos com o mouse/dedo
-const points = new THREE.Points(geometry, material);
-scene.add(points);
+// ============================================================
+// OBJETO DO CORAÇÃO
+// ============================================================
 
-function updateGeometry() {
-  const positions = geometry.attributes.position.array;
-  for (let i = 0; i < vertices.length; i++) {
-    positions[i * 3] = vertices[i].x;
-    positions[i * 3 + 1] = vertices[i].y;
-    positions[i * 3 + 2] = vertices[i].z;
+const heart = new THREE.Points(geometry, particleMaterial);
+
+scene.add(heart);
+
+// ============================================================
+// ANIMAÇÃO DAS PARTÍCULAS
+// ============================================================
+
+const animationData = {
+  progress: 0,
+};
+
+// ------------------------------------------------------------
+// Função para atualizar posição
+// ------------------------------------------------------------
+
+function updateParticles(progress) {
+  for (let i = 0; i < particleCount; i++) {
+    const index = i * 3;
+
+    // --------------------------------------------------------
+    // Delay individual
+    // --------------------------------------------------------
+
+    const delay = (i / particleCount) * 0.65;
+
+    let p = (progress - delay) / (1 - delay);
+
+    p = Math.max(0, Math.min(1, p));
+
+    // Ease
+    const eased = p * p * (3 - 2 * p);
+
+    // --------------------------------------------------------
+    // Movimento
+    // --------------------------------------------------------
+
+    positions[index] =
+      scatterPositions[index] +
+      (targets[index] - scatterPositions[index]) * eased;
+
+    positions[index + 1] =
+      scatterPositions[index + 1] +
+      (targets[index + 1] - scatterPositions[index + 1]) * eased;
+
+    positions[index + 2] =
+      scatterPositions[index + 2] +
+      (targets[index + 2] - scatterPositions[index + 2]) * eased;
   }
+
   geometry.attributes.position.needsUpdate = true;
 }
 
-// ---- Timeline: formar -> pausar -> desfazer ----
-const HOLD_DURATION = 4;
-const FORM_STAGGER = 0.002;
-const DISSOLVE_STAGGER = 0.002;
+// ============================================================
+// LOOP DE ANIMAÇÃO GSAP
+// ============================================================
 
-const tl = gsap.timeline({ repeat: -1, repeatDelay: 1 });
+function playHeartAnimation() {
+  animationData.progress = 0;
 
-vertices.forEach((v, i) => {
-  tl.to(
-    v,
-    {
-      x: targets[i].x,
-      y: targets[i].y,
-      z: targets[i].z,
-      ease: "power2.out",
-      duration: "random(1.5,3.5)",
+  // ----------------------------------------------------------
+  // FORMA
+  // ----------------------------------------------------------
+
+  gsap.to(animationData, {
+    progress: 1,
+
+    duration: CONFIG.FORM_TIME,
+
+    ease: "power2.out",
+
+    onUpdate: () => {
+      updateParticles(animationData.progress);
     },
-    i * FORM_STAGGER,
-  );
-});
 
-tl.to({}, { duration: HOLD_DURATION });
-
-vertices.forEach((v, i) => {
-  const newScatter = new THREE.Vector3(
-    v.x + (Math.random() - 0.5) * 900,
-    v.y + (Math.random() - 0.5) * 900,
-    (Math.random() - 0.5) * 800,
-  );
-  tl.to(
-    v,
-    {
-      x: newScatter.x,
-      y: newScatter.y,
-      z: newScatter.z,
-      ease: "power2.in",
-      duration: "random(1.5,3.5)",
+    onComplete: () => {
+      // Espera parado
+      gsap.delayedCall(CONFIG.HOLD_TIME, dissolveHeart);
     },
-    ">-" + Math.max(0, vertices.length - i) * DISSOLVE_STAGGER,
-  );
-});
+  });
+}
 
-// =========================================================
-// ---- SISTEMA DE FAÍSCAS (brilhos soltos durante o giro) ----
-// =========================================================
-const MAX_SPARKLES = 2000;
+// ============================================================
+// DISSOLVE
+// ============================================================
 
-const sparklePositions = new Float32Array(MAX_SPARKLES * 3);
-const sparkleAlphas = new Float32Array(MAX_SPARKLES);
-const sparkleSizes = new Float32Array(MAX_SPARKLES);
+function dissolveHeart() {
+  gsap.to(animationData, {
+    progress: 0,
+
+    duration: CONFIG.DISSOLVE_TIME,
+
+    ease: "power2.inOut",
+
+    onUpdate: () => {
+      updateParticles(animationData.progress);
+    },
+
+    onComplete: () => {
+      // Novas posições aleatórias
+      for (let i = 0; i < particleCount; i++) {
+        const index = i * 3;
+
+        scatterPositions[index] =
+          targets[index] + (Math.random() - 0.5) * CONFIG.SCATTER_X;
+
+        scatterPositions[index + 1] =
+          targets[index + 1] + (Math.random() - 0.5) * CONFIG.SCATTER_Y;
+
+        scatterPositions[index + 2] =
+          targets[index + 2] + (Math.random() - 0.5) * CONFIG.SCATTER_Z;
+      }
+
+      // Reinicia
+      gsap.delayedCall(0.7, playHeartAnimation);
+    },
+  });
+}
+
+// ============================================================
+// FAÍSCAS
+// ============================================================
+
+const sparkleCount = CONFIG.SPARKLES;
+
+const sparklePositions = new Float32Array(sparkleCount * 3);
+
+const sparkleAlpha = new Float32Array(sparkleCount);
+
+const sparkleSize = new Float32Array(sparkleCount);
+
+// ------------------------------------------------------------
+// Dados individuais
+// ------------------------------------------------------------
+
+const sparkleVelocity = [];
+
+const sparkleLife = [];
+
+const sparkleMaxLife = [];
+
+// ------------------------------------------------------------
+// Inicialização
+// ------------------------------------------------------------
+
+for (let i = 0; i < sparkleCount; i++) {
+  sparklePositions[i * 3] = 0;
+  sparklePositions[i * 3 + 1] = 0;
+  sparklePositions[i * 3 + 2] = 0;
+
+  sparkleAlpha[i] = 0;
+
+  sparkleSize[i] = 1.5 + Math.random() * 4;
+
+  sparkleVelocity.push(new THREE.Vector3());
+
+  sparkleLife.push(0);
+
+  sparkleMaxLife.push(1);
+}
+
+// ============================================================
+// GEOMETRIA DAS FAÍSCAS
+// ============================================================
 
 const sparkleGeometry = new THREE.BufferGeometry();
+
 sparkleGeometry.setAttribute(
   "position",
   new THREE.BufferAttribute(sparklePositions, 3),
 );
+
 sparkleGeometry.setAttribute(
   "aAlpha",
-  new THREE.BufferAttribute(sparkleAlphas, 1),
-);
-sparkleGeometry.setAttribute(
-  "aSize",
-  new THREE.BufferAttribute(sparkleSizes, 1),
+  new THREE.BufferAttribute(sparkleAlpha, 1),
 );
 
+sparkleGeometry.setAttribute(
+  "aSize",
+  new THREE.BufferAttribute(sparkleSize, 1),
+);
+
+// ============================================================
+// SHADER DAS FAÍSCAS
+// ============================================================
+
 const sparkleMaterial = new THREE.ShaderMaterial({
-  uniforms: { map: { value: glowTexture } },
+  uniforms: {
+    uTexture: {
+      value: glowTexture,
+    },
+  },
+
   vertexShader: `
-    attribute float aAlpha;
-    attribute float aSize;
-    varying float vAlpha;
-    void main() {
-      vAlpha = aAlpha;
-      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      gl_PointSize = aSize * (300.0 / -mvPosition.z);
-      gl_Position = projectionMatrix * mvPosition;
-    }
-  `,
+
+      attribute float aAlpha;
+      attribute float aSize;
+
+      varying float vAlpha;
+
+      void main() {
+
+        vAlpha = aAlpha;
+
+        vec4 mvPosition =
+          modelViewMatrix *
+          vec4(position, 1.0);
+
+        gl_PointSize =
+          aSize *
+          (350.0 / -mvPosition.z);
+
+        gl_Position =
+          projectionMatrix *
+          mvPosition;
+
+      }
+
+    `,
+
   fragmentShader: `
-    uniform sampler2D map;
-    varying float vAlpha;
-    void main() {
-      vec4 tex = texture2D(map, gl_PointCoord);
-      gl_FragColor = vec4(tex.rgb, tex.a * vAlpha);
-    }
-  `,
+
+      uniform sampler2D uTexture;
+
+      varying float vAlpha;
+
+      void main() {
+
+        vec4 tex =
+          texture2D(
+            uTexture,
+            gl_PointCoord
+          );
+
+        vec3 color =
+          vec3(
+            1.0,
+            0.18,
+            0.48
+          );
+
+        gl_FragColor =
+          vec4(
+            color,
+            tex.a * vAlpha
+          );
+
+      }
+
+    `,
+
   transparent: true,
+
   depthWrite: false,
+
   blending: THREE.AdditiveBlending,
 });
 
 const sparklePoints = new THREE.Points(sparkleGeometry, sparkleMaterial);
-scene.add(sparklePoints); // fica em espaço "mundo", não gira junto com o coração
 
-// pool de faíscas reutilizáveis
-const sparklePool = [];
-for (let i = 0; i < MAX_SPARKLES; i++) {
-  sparklePool.push({
-    active: false,
-    life: 0,
-    maxLife: 1,
-    velocity: new THREE.Vector3(),
-  });
-}
+scene.add(sparklePoints);
+
+// ============================================================
+// CRIAR UMA FAÍSCA
+// ============================================================
+
 let sparkleCursor = 0;
 
-function spawnSparkle(worldPos) {
-  const s = sparklePool[sparkleCursor];
-  s.active = true;
-  s.life = 0;
-  s.maxLife = 0.4 + Math.random() * 0.5;
-  s.velocity.set(
-    (Math.random() - 0.5) * 60,
-    (Math.random() - 0.5) * 60,
-    (Math.random() - 0.5) * 60,
+function spawnSparkle(position) {
+  const i = sparkleCursor;
+
+  sparklePositions[i * 3] = position.x;
+
+  sparklePositions[i * 3 + 1] = position.y;
+
+  sparklePositions[i * 3 + 2] = position.z;
+
+  sparkleAlpha[i] = 1;
+
+  sparkleSize[i] = 2 + Math.random() * 6;
+
+  sparkleVelocity[i].set(
+    (Math.random() - 0.5) * 80,
+
+    (Math.random() - 0.5) * 80,
+
+    (Math.random() - 0.5) * 80,
   );
 
-  sparklePositions[sparkleCursor * 3] = worldPos.x;
-  sparklePositions[sparkleCursor * 3 + 1] = worldPos.y;
-  sparklePositions[sparkleCursor * 3 + 2] = worldPos.z;
-  sparkleAlphas[sparkleCursor] = 1;
-  sparkleSizes[sparkleCursor] = 6 + Math.random() * 8;
+  sparkleLife[i] = 0;
 
-  sparkleCursor = (sparkleCursor + 1) % MAX_SPARKLES;
+  sparkleMaxLife[i] = 0.35 + Math.random() * 0.8;
+
+  sparkleCursor++;
+
+  if (sparkleCursor >= sparkleCount) {
+    sparkleCursor = 0;
+  }
 }
 
-function updateSparkles(delta) {
-  for (let i = 0; i < MAX_SPARKLES; i++) {
-    const s = sparklePool[i];
-    if (!s.active) continue;
+// ============================================================
+// ATUALIZA FAÍSCAS
+// ============================================================
 
-    s.life += delta;
-    if (s.life >= s.maxLife) {
-      s.active = false;
-      sparkleAlphas[i] = 0;
+function updateSparkles(delta) {
+  for (let i = 0; i < sparkleCount; i++) {
+    if (sparkleAlpha[i] <= 0) {
       continue;
     }
 
-    const t = s.life / s.maxLife;
-    sparkleAlphas[i] = 1 - t;
+    sparkleLife[i] += delta;
 
-    sparklePositions[i * 3] += s.velocity.x * delta;
-    sparklePositions[i * 3 + 1] += s.velocity.y * delta;
-    sparklePositions[i * 3 + 2] += s.velocity.z * delta;
+    if (sparkleLife[i] >= sparkleMaxLife[i]) {
+      sparkleAlpha[i] = 0;
+
+      continue;
+    }
+
+    const t = sparkleLife[i] / sparkleMaxLife[i];
+
+    sparkleAlpha[i] = 1 - t;
+
+    sparklePositions[i * 3] += sparkleVelocity[i].x * delta;
+
+    sparklePositions[i * 3 + 1] += sparkleVelocity[i].y * delta;
+
+    sparklePositions[i * 3 + 2] += sparkleVelocity[i].z * delta;
   }
+
   sparkleGeometry.attributes.position.needsUpdate = true;
+
   sparkleGeometry.attributes.aAlpha.needsUpdate = true;
 }
 
-// =========================================================
-// ---- ROTAÇÃO POR MOUSE / TOQUE (Pointer Events unifica os dois) ----
-// =========================================================
-let isDragging = false;
-let prevX = 0;
-let prevY = 0;
-let dragSpeed = 0; // usado para saber a intensidade do giro e soltar mais/menos faíscas
+// ============================================================
+// CONTROLE DE MOUSE / TOUCH
+// ============================================================
 
-canvas.addEventListener("pointerdown", (e) => {
+let isDragging = false;
+
+let previousX = 0;
+let previousY = 0;
+
+let dragVelocity = 0;
+
+// ------------------------------------------------------------
+// DOWN
+// ------------------------------------------------------------
+
+canvas.addEventListener("pointerdown", (event) => {
   isDragging = true;
-  prevX = e.clientX;
-  prevY = e.clientY;
-  canvas.setPointerCapture(e.pointerId);
+
+  previousX = event.clientX;
+
+  previousY = event.clientY;
+
+  canvas.setPointerCapture(event.pointerId);
 });
 
-canvas.addEventListener("pointermove", (e) => {
+// ------------------------------------------------------------
+// MOVE
+// ------------------------------------------------------------
+
+canvas.addEventListener("pointermove", (event) => {
   if (!isDragging) return;
 
-  const deltaX = e.clientX - prevX;
-  const deltaY = e.clientY - prevY;
-  prevX = e.clientX;
-  prevY = e.clientY;
+  const dx = event.clientX - previousX;
 
-  const sensitivity = 0.005;
-  points.rotation.y += deltaX * sensitivity;
-  points.rotation.x += deltaY * sensitivity;
+  const dy = event.clientY - previousY;
 
-  dragSpeed = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  previousX = event.clientX;
+
+  previousY = event.clientY;
+
+  // Sensibilidade
+  const sensitivity = 0.006;
+
+  heart.rotation.y += dx * sensitivity;
+
+  heart.rotation.x += dy * sensitivity;
+
+  dragVelocity = Math.sqrt(dx * dx + dy * dy);
 });
 
-canvas.addEventListener("pointerup", () => {
+// ------------------------------------------------------------
+// UP
+// ------------------------------------------------------------
+
+function stopDragging() {
   isDragging = false;
-  dragSpeed = 0;
-});
-canvas.addEventListener("pointerleave", () => {
-  isDragging = false;
-  dragSpeed = 0;
-});
 
-// ---- Loop de animação ----
+  dragVelocity = 0;
+}
+
+canvas.addEventListener("pointerup", stopDragging);
+
+canvas.addEventListener("pointercancel", stopDragging);
+
+// ============================================================
+// ANIMAÇÃO
+// ============================================================
+
 const clock = new THREE.Clock();
 
 function animate() {
   requestAnimationFrame(animate);
+
   const delta = clock.getDelta();
 
-  updateGeometry();
+  // ----------------------------------------------------------
+  // Rotação automática
+  // ----------------------------------------------------------
 
-  // rotação suave automática quando não está arrastando
   if (!isDragging) {
-    points.rotation.y += 0.0015;
+    heart.rotation.y += 0.0012;
   }
 
-  // solta faíscas proporcional à velocidade do arraste
-  if (isDragging && dragSpeed > 0.5) {
-    const sparkleCount = Math.min(30, Math.floor(dragSpeed / 1.2));
-    for (let n = 0; n < sparkleCount; n++) {
-      const randomIndex = Math.floor(Math.random() * vertices.length);
-      const localPos = vertices[randomIndex];
-      const worldPos = localPos.clone().applyMatrix4(points.matrixWorld);
-      spawnSparkle(worldPos);
+  // ----------------------------------------------------------
+  // Faíscas durante arraste
+  // ----------------------------------------------------------
+
+  if (isDragging && dragVelocity > 1) {
+    const amount = Math.min(18, Math.floor(dragVelocity / 2));
+
+    for (let i = 0; i < amount; i++) {
+      const randomIndex = Math.floor(Math.random() * particleCount);
+
+      const index = randomIndex * 3;
+
+      const localPosition = new THREE.Vector3(
+        positions[index],
+        positions[index + 1],
+        positions[index + 2],
+      );
+
+      const worldPosition = localPosition.applyMatrix4(heart.matrixWorld);
+
+      spawnSparkle(worldPosition);
     }
   }
 
@@ -321,4 +847,13 @@ function animate() {
 
   renderer.render(scene, camera);
 }
+
+// ============================================================
+// INICIAR
+// ============================================================
+
+updateParticles(0);
+
+playHeartAnimation();
+
 animate();
