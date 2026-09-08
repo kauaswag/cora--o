@@ -8,7 +8,8 @@ const renderer = new THREE.WebGLRenderer({
   alpha: true,
 });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+// Limita o pixel ratio para 2, melhorando a performance no mobile
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
@@ -148,7 +149,7 @@ vertices.forEach((v, i) => {
 // =========================================================
 // ---- SISTEMA DE FAÍSCAS (brilhos soltos durante o giro) ----
 // =========================================================
-const MAX_SPARKLES = 500;
+const MAX_SPARKLES = 2000;
 
 const sparklePositions = new Float32Array(MAX_SPARKLES * 3);
 const sparkleAlphas = new Float32Array(MAX_SPARKLES);
@@ -306,8 +307,8 @@ function animate() {
   }
 
   // solta faíscas proporcional à velocidade do arraste
-  if (isDragging && dragSpeed > 1) {
-    const sparkleCount = Math.min(6, Math.floor(dragSpeed / 4));
+  if (isDragging && dragSpeed > 0.5) {
+    const sparkleCount = Math.min(30, Math.floor(dragSpeed / 1.2));
     for (let n = 0; n < sparkleCount; n++) {
       const randomIndex = Math.floor(Math.random() * vertices.length);
       const localPos = vertices[randomIndex];
